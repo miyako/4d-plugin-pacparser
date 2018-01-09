@@ -13,7 +13,7 @@
 
 ### Discussion
 
-PAC, or (Proxy auto-config)[https://en.wikipedia.org/wiki/Proxy_auto-config] is a text file that defines at least one JavaScript function, ``FindProxyForURL(url, host)``, which causes the user agent to use a particular proxy server or to connect directly. [``pacparser``](https://github.com/manugarg/pacparser) uses the [SpiderMonkey](https://en.wikipedia.org/wiki/SpiderMonkey)  JavaScript engine to evaluate this function.
+PAC, or [Proxy auto-config](https://en.wikipedia.org/wiki/Proxy_auto-config) is a text file that defines at least one JavaScript function, ``FindProxyForURL(url, host)``, which causes the user agent to use a particular proxy server or to connect directly. [``pacparser``](https://github.com/manugarg/pacparser) uses the [SpiderMonkey](https://en.wikipedia.org/wiki/SpiderMonkey)  JavaScript engine to evaluate this function.
 
 ---
 
