@@ -1,11 +1,11 @@
-# 4d-plugin-proxy
-4D implementation of [libproxy](https://github.com/libproxy/libproxy)
+# 4d-plugin-pacparser
+4D implementation of [pacparser](https://github.com/manugarg/pacparser)
 
 ### Platform
 
 | carbon | cocoa | win32 | win64 |
 |:------:|:-----:|:---------:|:---------:|
-|<img src="https://cloud.githubusercontent.com/assets/1725068/22371562/1b091f0a-e4db-11e6-8458-8653954a7cce.png" width="24" height="24" />|<img src="https://cloud.githubusercontent.com/assets/1725068/22371562/1b091f0a-e4db-11e6-8458-8653954a7cce.png" width="24" height="24" />|<img src="https://cloud.githubusercontent.com/assets/1725068/22371562/1b091f0a-e4db-11e6-8458-8653954a7cce.png" width="24" height="24" />|<img src="https://cloud.githubusercontent.com/assets/1725068/22371562/1b091f0a-e4db-11e6-8458-8653954a7cce.png" width="24" height="24" />|
+|<img src="https://cloud.githubusercontent.com/assets/1725068/22371562/1b091f0a-e4db-11e6-8458-8653954a7cce.png" width="24" height="24" />|<img src="https://cloud.githubusercontent.com/assets/1725068/22371562/1b091f0a-e4db-11e6-8458-8653954a7cce.png" width="24" height="24" />|||
 
 ### Version
 
@@ -16,18 +16,22 @@
 ## Syntax
 
 ```
-GET PROXIES (url;proxies)
+proxy:=PAC Find proxy (pac;url;host)
 ```
 
 Parameter|Type|Description
 ------------|------------|----
+pac|TEXT|
 url|TEXT|
-proxies|ARRAY TEXT|
+host|TEXT|
+proxy|TEXT|
 
 ## Examples
 
 ```
-$url:="http://www.google.com"
+$path:=Get 4D folder(Current resources folder)+"wpad.dat"
 
-GET PROXIES ($url;$proxies)
+$pac:=Document to text($path;"utf-8")
+
+$proxy:=PAC Find proxy ($pac;"http://www.google.com";"www.google.com")
 ```
