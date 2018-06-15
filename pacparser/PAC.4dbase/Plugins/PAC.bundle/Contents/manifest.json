@@ -1,1 +1,11 @@
-﻿{"name":"PAC","id":20000,"commands":[{"theme":"PAC","syntax":"PAC Find proxy(&T;&T;&T):T"}]}
+﻿{
+	"name": "PAC",
+	"id": 20000,
+	"commands": [
+							 {
+							 "theme": "PAC",
+							 "syntax": "PAC Find proxy(&T;&T;&T):T",
+							 "threadSafe": true
+							 }
+							 ]
+}
