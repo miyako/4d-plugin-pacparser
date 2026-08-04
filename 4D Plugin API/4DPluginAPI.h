@@ -90,7 +90,7 @@
 //BSD wrappers
 #define close closesocket
 #define TickCount GetTickCount
-#define getpid GetCurrentProcessId
+//#define getpid GetCurrentProcessId
 #include <winsock2.h>
 
 #include <ws2tcpip.h>
