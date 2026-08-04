@@ -1,1 +1,7 @@
 build/*
+.vs/*
+PAC.4dbase/Plugins/PAC.bundle/Contents/Windows64/PAC.lib
+PAC.4dbase/Plugins/PAC.bundle/Contents/Windows64/PAC.4DX
+PAC.vcxproj.user
+PAC.4dbase/Plugins/PAC.bundle/Contents/Windows64/PAC.exp
+Objs/*
