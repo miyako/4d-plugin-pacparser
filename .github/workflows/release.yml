@@ -51,10 +51,8 @@ jobs:
     name: Build Windows (x64)
     needs: version
     # Pinned rather than windows-latest just to reduce image drift going
-    # forward. Note this alone does NOT dodge the SDK 10.0.26100.0 header
-    # bug below - GitHub has since backported that SDK to windows-2022 too.
-    # The actual fix is the WindowsTargetPlatformVersion override in the
-    # "build x64" step.
+    # forward. See the WindowsTargetPlatformVersion comment in the
+    # "build x64" step below for the SDK header bug this project has hit.
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
@@ -68,15 +66,18 @@ jobs:
       # legacy v140 toolset the project is pinned to, so we override it on
       # the command line rather than requiring an extra VS component install.
       #
-      # WindowsTargetPlatformVersion is also pinned to 10.0.22621.0: the
-      # default/highest SDK on current runners (10.0.26100.0) has a header
-      # bug where ucrt/process.h and um/processthreadsapi.h both declare
-      # GetCurrentProcessId with incompatible return types (C2556/C2371).
-      # Runner images keep older SDKs installed side by side, so pinning
-      # here sidesteps the bug without needing a source change.
+      # WindowsTargetPlatformVersion was previously pinned to 10.0.22621.0 to
+      # dodge a header bug believed to be in the newer 10.0.26100.0 SDK
+      # (ucrt/process.h and um/processthreadsapi.h both declaring
+      # GetCurrentProcessId with incompatible return types - C2556/C2371).
+      # That's now backwards: GitHub has since serviced 10.0.22621.0 itself
+      # with the same broken process.h, while the current default/highest
+      # SDK on the runner builds clean. So leave this unpinned ("10.0") and
+      # let MSBuild resolve to whichever full SDK is actually installed,
+      # rather than locking to a specific patch version that can rot.
       - name: build x64
         shell: cmd
-        run: msbuild "${{ env.VCX_SOLUTION }}" /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=v143 /p:WindowsTargetPlatformVersion=10.0.22621.0 /m
+        run: msbuild "${{ env.VCX_SOLUTION }}" /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=v143 /p:WindowsTargetPlatformVersion=10.0 /m
 
       - name: upload windows binaries
         uses: actions/upload-artifact@v4
