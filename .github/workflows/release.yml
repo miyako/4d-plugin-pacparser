@@ -50,7 +50,12 @@ jobs:
   build-windows:
     name: Build Windows (x64)
     needs: version
-    runs-on: windows-latest
+    # Pinned rather than windows-latest: that image moved to Windows SDK
+    # 10.0.26100.0, which has a header regression where ucrt/process.h and
+    # um/processthreadsapi.h both declare GetCurrentProcessId with
+    # incompatible signatures (C2556/C2371). windows-2022 ships an
+    # unaffected SDK. Revisit if/when Microsoft fixes the SDK header.
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
         with:
