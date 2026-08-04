@@ -50,10 +50,14 @@ jobs:
   build-windows:
     name: Build Windows (x64)
     needs: version
-    # Pinned rather than windows-latest just to reduce image drift going
-    # forward. See the WindowsTargetPlatformVersion comment in the
-    # "build x64" step below for the SDK header bug this project has hit.
-    runs-on: windows-2022
+    # NOTE: this was briefly pinned to windows-2022 to reduce image drift,
+    # but that image's only installed Windows SDK is 10.0.22621.0, whose
+    # ucrt/process.h has a header bug (GetCurrentProcessId redeclared with
+    # a conflicting return type - C2556/C2371) with no newer SDK on that
+    # image to fall back to. windows-latest carries a newer SDK that
+    # doesn't have the bug, so stick with the rolling tag here rather than
+    # pinning to a fixed image.
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -143,6 +147,7 @@ jobs:
             ARCHS="arm64 x86_64" \
             ONLY_ACTIVE_ARCH=NO \
             MACOSX_DEPLOYMENT_TARGET="${{ env.MACOS_DEPLOYMENT_TARGET }}" \
+            CODE_SIGNING_ALLOWED=NO \
             build
 
       - name: verify universal binary
