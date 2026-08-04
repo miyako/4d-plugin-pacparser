@@ -11,8 +11,23 @@
 
 #include "4DPluginAPI.h"
 #include "4DPlugin.h"
+#include <mutex>
 
 #pragma mark -
+
+// pacparser keeps ALL of its engine state (JS runtime/context, parsed script,
+// last result) in process-global variables and does no locking of its own
+// (see pacparser's own header/README: "the API is not thread-safe; there is
+// a single, shared parser instance per process... you must serialize all
+// pacparser_* calls with your own lock"). manifest.json marks "PAC Find proxy"
+// threadSafe:true, so 4D may call PAC_FIND_PROXY concurrently across
+// processes/threads. This mutex is what makes that declaration actually safe:
+// every pacparser_init / pacparser_parse_pac_string / pacparser_find_proxy /
+// pacparser_cleanup call in this file must go through it. In particular,
+// pacparser's docs single out calling pacparser_cleanup() while another
+// thread is inside pacparser_find_proxy()/pacparser_parse_pac*() as a
+// use-after-free crash -- this lock is what prevents that specifically.
+static std::mutex g_pacparserMutex;
 
 bool IsProcessOnExit()
 {
@@ -26,6 +41,7 @@ bool IsProcessOnExit()
 
 void OnStartup()
 {
+	std::lock_guard<std::mutex> lock(g_pacparserMutex);
 	pacparser_init();
 }
 
@@ -33,6 +49,7 @@ void OnCloseProcess()
 {
 	if(IsProcessOnExit())
 	{
+		std::lock_guard<std::mutex> lock(g_pacparserMutex);
 		pacparser_cleanup();
 	}
 }
@@ -84,23 +101,49 @@ void PAC_FIND_PROXY(sLONG_PTR *pResult, PackagePtr pParams)
 	C_TEXT Param2;
 	C_TEXT Param3;
 	C_TEXT returnValue;
-	
-	Param1.fromParamAtIndex(pParams, 1);
-	Param2.fromParamAtIndex(pParams, 2);
-	Param3.fromParamAtIndex(pParams, 3);
-	
-	CUTF8String pac, url, host;
-	Param1.copyUTF8String(&pac);
-	Param2.copyUTF8String(&url);
-	Param3.copyUTF8String(&host);
-	
-	pacparser_parse_pac_string((const char *)pac.c_str());
-	
-	char *proxy = pacparser_find_proxy((const char *)url.c_str(), (const char *)host.c_str());
-	
-	if(proxy)
-		returnValue.setUTF8String((const uint8_t *)proxy, strlen(proxy));
-	
+
+	// Local try/catch so that whatever happens above, returnValue.setReturn()
+	// below is still guaranteed to run. Without this, an exception thrown by
+	// any SDK call in this function would propagate up to PluginMain's
+	// catch(...) and be swallowed there -- and since manifest.json declares
+	// this command with a return type (":T"), the 4D thread waiting on that
+	// return would then hang indefinitely instead of just getting an empty
+	// result back.
+	try
+	{
+		Param1.fromParamAtIndex(pParams, 1);
+		Param2.fromParamAtIndex(pParams, 2);
+		Param3.fromParamAtIndex(pParams, 3);
+
+		CUTF8String pac, url, host;
+		Param1.copyUTF8String(&pac);
+		Param2.copyUTF8String(&url);
+		Param3.copyUTF8String(&host);
+
+		// Everything that touches pacparser's process-global engine state
+		// must be serialized (see g_pacparserMutex's comment above OnStartup).
+		// The lock is held until after the returned proxy string has been
+		// copied into returnValue, because "proxy" points into pacparser's
+		// own internal buffer (proxy_result) -- not memory we own -- and a
+		// concurrent pacparser_cleanup()/pacparser_parse_pac_string() call on
+		// another thread could free or overwrite it the instant the lock is
+		// released.
+		std::lock_guard<std::mutex> lock(g_pacparserMutex);
+
+		pacparser_parse_pac_string((const char *)pac.c_str());
+
+		char *proxy = pacparser_find_proxy((const char *)url.c_str(), (const char *)host.c_str());
+
+		if(proxy)
+			returnValue.setUTF8String((const uint8_t *)proxy, strlen(proxy));
+	}
+	catch(...)
+	{
+		// Swallowed deliberately: returnValue is left as its default (empty)
+		// value, and we still fall through to setReturn() below so the
+		// caller gets a result instead of hanging.
+	}
+
 	returnValue.setReturn(pResult);
 }
 
