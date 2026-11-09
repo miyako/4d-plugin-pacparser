@@ -8,6 +8,8 @@
 # Canonical layout enforced:
 #   test/Plugins/<Product>.bundle/Contents/MacOS/<Product>
 #   test/Plugins/<Product>.bundle/Contents/Windows64/<Product>.4DX
+#   test/Plugins/<Product>.bundle/Contents/Windows64/*.dll  (committed runtime
+#     deps, verified by .github/scripts/verify-windows-deps.ps1)
 
 name: Build & Release
 
@@ -62,6 +64,20 @@ jobs:
       - name: setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
+      - name: stash committed runtime DLLs
+        shell: pwsh
+        run: |
+          # Prebuilt DLLs the plugin imports live next to the .4DX in the
+          # canonical bundle. Stash them outside the workspace before the
+          # bundle is wiped.
+          $product = "${{ env.PRODUCT_NAME }}"
+          $base = "${{ env.BASE_DIR }}"
+          $src = "$base/Plugins/$product.bundle/Contents/Windows64"
+          $stash = Join-Path $env:RUNNER_TEMP windlls
+          New-Item -ItemType Directory -Force -Path $stash | Out-Null
+          if (Test-Path $src) { Copy-Item "$src/*.dll" $stash }
+          Get-ChildItem $stash | Format-Table Name, Length
+
       - name: clean stale outputs
         shell: pwsh
         run: |
@@ -71,6 +87,12 @@ jobs:
           Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "$base/plugins"
           Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "$base/Plugins/Default"
           Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "Objs"
+          # Delete every pre-existing (e.g. committed legacy) .4DX so the
+          # locate step below can only ever find the binary this build links.
+          Get-ChildItem -Recurse -File -Filter "$product.4DX" -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "Removing stale $($_.FullName)"
+            Remove-Item -Force $_.FullName
+          }
 
       - name: build x64
         shell: cmd
@@ -85,12 +107,13 @@ jobs:
           $canonicalDir = "$base/Plugins/$product.bundle/Contents/Windows64"
           New-Item -ItemType Directory -Force -Path $canonicalDir | Out-Null
 
-          $found = Get-ChildItem -Recurse -Filter "$product.4DX" -ErrorAction SilentlyContinue | Where-Object { $_.FullName -like "*Plugins*" } | Select-Object -First 1
-          if (-not $found) {
+          $candidates = @(Get-ChildItem -Recurse -File -Filter "$product.4DX" -ErrorAction SilentlyContinue | Where-Object { $_.FullName -like "*Plugins*" })
+          if ($candidates.Count -ne 1) {
             Get-ChildItem -Recurse -Filter "*.4DX" | ForEach-Object { Write-Host $_.FullName }
-            Write-Error "Windows binary $product.4DX not found after build"
+            Write-Error "Expected exactly one freshly built $product.4DX, found $($candidates.Count)"
             exit 1
           }
+          $found = $candidates[0]
           Write-Host "Found at: $($found.FullName)"
 
           $destination = Join-Path $canonicalDir "$product.4DX"
@@ -108,11 +131,27 @@ jobs:
           }
           Get-ChildItem $canonicalDir
 
+      - name: bundle runtime DLLs
+        shell: pwsh
+        run: |
+          $product = "${{ env.PRODUCT_NAME }}"
+          $base = "${{ env.BASE_DIR }}"
+          $canonicalDir = "$base/Plugins/$product.bundle/Contents/Windows64"
+          $winbin = Join-Path $env:RUNNER_TEMP winbin
+          New-Item -ItemType Directory -Force -Path $winbin | Out-Null
+          Copy-Item "$canonicalDir/$product.4DX" $winbin
+          Copy-Item (Join-Path $env:RUNNER_TEMP 'windlls/*.dll') $winbin
+          Get-ChildItem $winbin | Format-Table Name, Length
+
+      - name: verify DLL dependencies
+        shell: pwsh
+        run: ./.github/scripts/verify-windows-deps.ps1 -Dir "$env:RUNNER_TEMP/winbin" -Binary "${{ env.PRODUCT_NAME }}.4DX"
+
       - name: upload windows binaries
         uses: actions/upload-artifact@v4
         with:
           name: windows-binaries
-          path: ${{ env.BASE_DIR }}/Plugins/${{ env.PRODUCT_NAME }}.bundle/Contents/Windows64/${{ env.PRODUCT_NAME }}.4DX
+          path: ${{ runner.temp }}/winbin/
           if-no-files-found: error
 
   build-macos:
@@ -224,14 +263,15 @@ jobs:
           echo "winbuild contents:"
           ls -R winbuild || true
 
-          SRC=$(find winbuild -name "${PRODUCT}.4DX" -type f | head -1)
-          if [ -z "$SRC" ]; then
+          if [ ! -f "winbuild/${PRODUCT}.4DX" ]; then
             echo "::error::Windows binary ${PRODUCT}.4DX not found in winbuild/"
             exit 1
           fi
 
-          echo "Copying $SRC -> $BUNDLE/Contents/Windows64/${PRODUCT}.4DX"
-          cp "$SRC" "$BUNDLE/Contents/Windows64/${PRODUCT}.4DX"
+          # The .4DX plus every runtime DLL it imports (closure verified on
+          # the windows job).
+          find winbuild -maxdepth 1 -type f \( -name "${PRODUCT}.4DX" -o -iname '*.dll' \) \
+            -exec cp {} "$BUNDLE/Contents/Windows64/" \;
 
           echo "BUNDLE_PATH=$BUNDLE" >> "$GITHUB_ENV"
           ls -R "$BUNDLE/Contents"
